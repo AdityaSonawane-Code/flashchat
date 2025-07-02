@@ -1,297 +1,137 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>FlashChat Group Chat (P2P Host-Relay)</title>
-<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-<style>
-  body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: #f9fafb;
-    margin: 0;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    color: #333;
-    min-height: 100vh;
-  }
-  h2 {
-    margin-bottom: 10px;
-    color: #222;
-  }
-  .container {
-    max-width: 550px;
-    width: 100%;
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 0 12px rgba(0,0,0,0.1);
-    padding: 20px;
-  }
-  input[type="text"] {
-    width: calc(100% - 24px);
-    padding: 10px;
-    font-size: 16px;
-    margin-bottom: 12px;
-    border: 1.8px solid #ccc;
-    border-radius: 6px;
-    transition: border-color 0.3s;
-  }
-  input[type="text"]:focus {
-    border-color: #007bff;
-    outline: none;
-  }
-  button {
-    background: #007bff;
-    border: none;
-    color: white;
-    padding: 10px 18px;
-    font-size: 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 0.3s;
-    margin-bottom: 12px;
-  }
-  button:hover {
-    background: #0056b3;
-  }
-  #chat {
-    display: none;
-    margin-top: 20px;
-    display: flex;
-    flex-direction: column;
-  }
-  #log {
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    height: 300px;
-    overflow-y: auto;
-    padding: 15px;
-    background: #fafafa;
-    margin-bottom: 12px;
-    font-size: 14px;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-  #message {
-    padding: 10px;
-    font-size: 16px;
-    border-radius: 6px;
-    border: 1.8px solid #ccc;
-    flex-grow: 1;
-    margin-right: 10px;
-  }
-  .message-row {
-    display: flex;
-  }
-  .sender {
-    font-weight: 600;
-    margin-right: 5px;
-  }
-  .input-row {
-    display: flex;
-    align-items: center;
-  }
-  .info {
-    font-size: 13px;
-    color: #555;
-    margin-bottom: 12px;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>Global Chat on GitHub Pages (Firebase)</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f2f5;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    h2 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 15px;
+    }
+    #messages {
+      flex: 1;
+      border: 1px solid #ccc;
+      background: white;
+      border-radius: 8px;
+      padding: 10px;
+      overflow-y: auto;
+      box-shadow: 0 2px 5px rgb(0 0 0 / 0.1);
+      margin-bottom: 10px;
+      font-size: 16px;
+      line-height: 1.4;
+    }
+    #messageInput {
+      width: calc(100% - 90px);
+      padding: 12px 15px;
+      font-size: 16px;
+      border-radius: 20px;
+      border: 1px solid #ccc;
+      outline: none;
+      transition: border-color 0.3s;
+      box-sizing: border-box;
+    }
+    #messageInput:focus {
+      border-color: #007bff;
+      box-shadow: 0 0 5px #007bff;
+    }
+    #sendBtn {
+      width: 70px;
+      margin-left: 10px;
+      background-color: #007bff;
+      border: none;
+      color: white;
+      font-weight: bold;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      font-size: 16px;
+      padding: 12px 0;
+    }
+    #sendBtn:hover {
+      background-color: #0056b3;
+    }
+    .message {
+      padding: 8px 12px;
+      background: #e9ecef;
+      border-radius: 15px;
+      margin-bottom: 6px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+  </style>
+
+  <!-- Firebase Compat SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 </head>
 <body>
-  <div class="container">
-    <h2>FlashChat Group 💬 - Host-Relay P2P Chat</h2>
-    <div class="info">
-      1. Enter or generate a <b>group code</b>.<br />
-      2. One user clicks <b>Start Host</b> to host the group.<br />
-      3. Others enter the same code and click <b>Join Group</b>.<br />
-      4. Everyone can chat live; messages relay through the host.<br />
-      5. Messages are lost on reload, no backend required.
-    </div>
-    <input id="groupCode" type="text" placeholder="Enter group code (e.g. funchat123)" />
-    <button onclick="generateCode()">Generate Random Group Code</button>
-    <button onclick="startHost()">Start Host</button>
-    <button onclick="joinGroup()">Join Group</button>
-
-    <div id="chat">
-      <div id="log"></div>
-      <div class="input-row">
-        <input id="message" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter'){send();}" />
-        <button onclick="send()">Send</button>
-      </div>
-    </div>
+  <h2>Global Chat (Firebase + GitHub Pages)</h2>
+  <div id="messages"></div>
+  <div style="display: flex;">
+    <input id="messageInput" placeholder="Type your message" autocomplete="off" />
+    <button id="sendBtn">Send</button>
   </div>
 
-<script>
-  let peer;
-  let connections = {}; // for host: key=peerId, val=connection object
-  let connToHost = null; // for clients, connection to host
-  let isHost = false;
-  let userId = null;
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAdEI5RSknsjqwupgHwsUkU1unXtdYrI94",
+      authDomain: "flashchat-219a1.firebaseapp.com",
+      databaseURL: "https://flashchat-219a1-default-rtdb.firebaseio.com",
+      projectId: "flashchat-219a1",
+      storageBucket: "flashchat-219a1.appspot.com",
+      messagingSenderId: "445754963",
+      appId: "1:445754963:web:f2b11ad14cd60bdb0ce0a6",
+      measurementId: "G-P14S3H9WCE"
+    };
 
-  function generateCode(length = 8) {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    let code = '';
-    for(let i=0; i<length; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    // Initialize Firebase (compat style)
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const messagesDiv = document.getElementById('messages');
+    const input = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // Append message nicely styled
+    function appendMessage(msg) {
+      const div = document.createElement('div');
+      div.className = 'message';
+      div.textContent = msg.text;
+      messagesDiv.appendChild(div);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
-    document.getElementById('groupCode').value = code;
-    alert(`Your group code: ${code}\nShare this with friends to join!`);
-  }
 
-  function startHost() {
-    const code = document.getElementById('groupCode').value.trim();
-    if (!code) return alert("Enter or generate a group code first.");
-    isHost = true;
-    userId = code; // Host's peer ID is the group code
-
-    peer = new Peer(userId);
-
-    peer.on('open', id => {
-      logSystem(`Host started with ID (group code): ${id}`);
-      alert("Host started! Friends can join with the group code.");
-      document.getElementById('chat').style.display = 'flex';
+    // Listen for new messages
+    db.ref('messages').limitToLast(100).on('child_added', snapshot => {
+      const msg = snapshot.val();
+      appendMessage(msg);
     });
 
-    peer.on('connection', conn => {
-      logSystem(`Peer connected: ${conn.peer}`);
-      connections[conn.peer] = conn;
+    sendBtn.onclick = () => {
+      const text = input.value.trim();
+      if (!text) return;
+      db.ref('messages').push({ text });
+      input.value = '';
+      input.focus();
+    };
 
-      // When data received from a client, relay to others + host log
-      conn.on('data', data => {
-        const messageObj = { from: conn.peer, text: data };
-        logMessage(messageObj.from, messageObj.text);
-
-        // Relay to all other peers except sender
-        for (const peerId in connections) {
-          if (peerId !== conn.peer) {
-            connections[peerId].send(`${messageObj.from}: ${messageObj.text}`);
-          }
-        }
-      });
-
-      conn.on('close', () => {
-        logSystem(`Peer disconnected: ${conn.peer}`);
-        delete connections[conn.peer];
-      });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') sendBtn.click();
     });
-
-    peer.on('error', err => {
-      alert('Host error: ' + err);
-    });
-  }
-
-  function joinGroup() {
-    const code = document.getElementById('groupCode').value.trim();
-    if (!code) return alert("Enter group code to join.");
-    if (isHost) return alert("You are already the host.");
-
-    userId = generateRandomUserId();
-    peer = new Peer(userId);
-
-    peer.on('open', id => {
-      logSystem(`Client started with ID: ${id}`);
-      connToHost = peer.connect(code);
-
-      connToHost.on('open', () => {
-        logSystem(`Connected to host: ${code}`);
-        document.getElementById('chat').style.display = 'flex';
-      });
-
-      connToHost.on('data', data => {
-        // Host relays messages as plain strings prefixed by "sender: message"
-        const splitIndex = data.indexOf(':');
-        if(splitIndex !== -1){
-          const from = data.substring(0, splitIndex);
-          const text = data.substring(splitIndex + 1).trim();
-          logMessage(from, text);
-        } else {
-          logMessage("Host", data);
-        }
-      });
-
-      connToHost.on('close', () => {
-        logSystem('Disconnected from host.');
-        alert('Host disconnected or connection lost.');
-        document.getElementById('chat').style.display = 'none';
-      });
-
-      connToHost.on('error', err => {
-        alert('Connection error: ' + err);
-      });
-    });
-
-    peer.on('error', err => {
-      alert('Peer error: ' + err);
-    });
-  }
-
-  function send() {
-    const input = document.getElementById('message');
-    const msg = input.value.trim();
-    if (!msg) return;
-
-    if (isHost) {
-      // Host sends message to all connected peers AND logs it locally
-      logMessage('You (Host)', msg);
-      for (const peerId in connections) {
-        connections[peerId].send(`Host: ${msg}`);
-      }
-    } else {
-      // Client sends message to host
-      if (!connToHost || connToHost.open === false) {
-        alert("Not connected to host.");
-        return;
-      }
-      connToHost.send(msg);
-      logMessage('You', msg);
-    }
-    input.value = '';
-    input.focus();
-  }
-
-  // Utility: logs chat messages
-  function logMessage(sender, text) {
-    const log = document.getElementById('log');
-    const div = document.createElement('div');
-    div.classList.add('message-row');
-    div.innerHTML = `<span class="sender">${escapeHtml(sender)}:</span> <span>${escapeHtml(text)}</span>`;
-    log.appendChild(div);
-    log.scrollTop = log.scrollHeight;
-  }
-
-  // Utility: logs system info messages
-  function logSystem(text) {
-    const log = document.getElementById('log');
-    const div = document.createElement('div');
-    div.style.fontStyle = 'italic';
-    div.style.color = '#888';
-    div.textContent = text;
-    log.appendChild(div);
-    log.scrollTop = log.scrollHeight;
-  }
-
-  // Utility: escape html for safe display
-  function escapeHtml(text) {
-    return text.replace(/&/g, "&amp;")
-               .replace(/</g, "&lt;")
-               .replace(/>/g, "&gt;")
-               .replace(/"/g, "&quot;")
-               .replace(/'/g, "&#039;");
-  }
-
-  // Utility: generate a random user ID for clients joining group
-  function generateRandomUserId(length = 6) {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    let id = 'user_';
-    for(let i=0; i<length; i++) {
-      id += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return id;
-  }
-</script>
+  </script>
 </body>
 </html>
