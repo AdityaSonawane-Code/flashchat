@@ -252,6 +252,7 @@
       peer.on('open', id => {
         logSystem(`Host started: ${id}`);
         alert("You are now the host. Share the code with others.");
+        updateUserList();
       });
 
       peer.on('connection', conn => {
@@ -327,6 +328,18 @@
         });
 
         connToHost.on('error', err => alert('Connection error: ' + err));
+      });
+    }
+
+    function updateUserList() {
+      const userList = document.getElementById("userList");
+      userList.innerHTML = "";
+      const allUsers = [userId, ...Object.keys(connections)];
+      allUsers.forEach(id => {
+        const div = document.createElement("div");
+        div.className = "user-item";
+        div.textContent = id;
+        userList.appendChild(div);
       });
     }
 
