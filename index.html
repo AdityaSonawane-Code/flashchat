@@ -156,8 +156,8 @@
       </select>
       <input type="text" id="groupCode" placeholder="Enter group/friend code" />
       <button onclick="generateCode()">Generate Code</button>
-      <button onclick="startHost()">Start Chat</button>
-      <button onclick="joinGroup()">Connect</button>
+      <button onclick="startHost()">Start Chat (Host)</button>
+      <button onclick="joinGroup()">Join Group</button>
     </div>
 
     <div class="main-chat">
@@ -184,167 +184,167 @@
 
   <script>
     let peer;
-    let connections = {};
-    let connToHost = null;
-    let isHost = false;
-    let userId = null;
-    let mode = 'group';
+let connections = {};
+let connToHost = null;
+let isHost = false;
+let userId = null;
+let mode = 'group';
 
-    document.getElementById('chatMode').addEventListener('change', e => {
-      mode = e.target.value;
+document.getElementById('chatMode').addEventListener('change', e => {
+  mode = e.target.value;
+});
+
+function generateCode(length = 8) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  document.getElementById('groupCode').value = code;
+  alert(`Code generated: ${code}`);
+}
+
+function startHost() {
+  const code = document.getElementById('groupCode').value.trim();
+  if (!code) return alert("Enter or generate a code first.");
+  isHost = true;
+  userId = code;
+  peer = new Peer(userId);
+
+  peer.on('open', id => {
+    logSystem(`Host started: ${id}`);
+    alert("You are now the host. Share the code with others.");
+  });
+
+  peer.on('connection', conn => {
+    if (mode === 'private' && Object.keys(connections).length >= 1) {
+      conn.send("Only 2 users allowed in private chat.");
+      conn.close();
+      return;
+    }
+
+    logSystem(`User connected: ${conn.peer}`);
+    connections[conn.peer] = conn;
+    updateUserList();
+
+    conn.on('data', data => {
+      const msg = { from: conn.peer, text: data };
+      logMessage(msg.from, msg.text);
+      for (const peerId in connections) {
+        if (peerId !== conn.peer) {
+          connections[peerId].send(`${msg.from}: ${msg.text}`);
+        }
+      }
     });
 
-    function generateCode(length = 8) {
-      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-      let code = '';
-      for (let i = 0; i < length; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      document.getElementById('groupCode').value = code;
-      alert(`Generated Code: ${code}`);
-    }
+    conn.on('close', () => {
+      logSystem(`Disconnected: ${conn.peer}`);
+      delete connections[conn.peer];
+      updateUserList();
+    });
+  });
 
-    function startHost() {
-      const code = document.getElementById('groupCode').value.trim();
-      if (!code) return alert("Enter or generate a code first.");
-      isHost = true;
-      userId = code;
-      peer = new Peer(userId);
+  peer.on('error', err => alert('Host error: ' + err));
+}
 
-      peer.on('open', id => {
-        logSystem(`Host started with ID: ${id}`);
-      });
+function joinGroup() {
+  const code = document.getElementById('groupCode').value.trim();
+  if (!code) return alert("Enter a code to join.");
+  if (isHost) return alert("You are the host already.");
 
-      peer.on('connection', conn => {
-        if (mode === 'private' && Object.keys(connections).length >= 1) {
-          conn.send("Private chat full. Only 2 users allowed.");
-          conn.close();
-          return;
-        }
+  userId = generateRandomUserId();
+  peer = new Peer(userId);
 
-        connections[conn.peer] = conn;
-        updateUserList();
-        logSystem(`User connected: ${conn.peer}`);
+  peer.on('open', id => {
+    connToHost = peer.connect(code);
 
-        conn.on('data', data => {
-          logMessage(conn.peer, data);
-          if (mode === 'group') {
-            for (const peerId in connections) {
-              if (peerId !== conn.peer) {
-                connections[peerId].send(`${conn.peer}: ${data}`);
-              }
-            }
-          } else if (mode === 'private') {
-            for (const peerId in connections) {
-              if (peerId !== conn.peer) {
-                connections[peerId].send(`${conn.peer}: ${data}`);
-              }
-            }
-          }
-        });
+    connToHost.on('open', () => {
+      logSystem(`Connected to: ${code}`);
+    });
 
-        conn.on('close', () => {
-          delete connections[conn.peer];
-          updateUserList();
-          logSystem(`${conn.peer} disconnected.`);
-        });
-      });
-    }
-
-    function joinGroup() {
-      const code = document.getElementById('groupCode').value.trim();
-      if (!code) return alert("Enter the code to connect.");
-      if (isHost) return alert("You are the host.");
-
-      userId = generateRandomUserId();
-      peer = new Peer(userId);
-
-      peer.on('open', id => {
-        connToHost = peer.connect(code);
-
-        connToHost.on('open', () => {
-          logSystem(`Connected to ${code}`);
-        });
-
-        connToHost.on('data', data => {
-          const split = data.indexOf(':');
-          if (split !== -1) {
-            const from = data.slice(0, split);
-            const text = data.slice(split + 1).trim();
-            logMessage(from, text);
-          } else {
-            logMessage("Host", data);
-          }
-        });
-
-        connToHost.on('close', () => {
-          logSystem("Disconnected from host.");
-        });
-      });
-    }
-
-    function send() {
-      const msg = document.getElementById('message').value.trim();
-      if (!msg) return;
-      if (isHost) {
-        logMessage("You (Host)", msg);
-        for (const id in connections) {
-          connections[id].send(`Host: ${msg}`);
-        }
-      } else if (connToHost && connToHost.open) {
-        connToHost.send(msg);
-        logMessage("You", msg);
+    connToHost.on('data', data => {
+      const split = data.indexOf(':');
+      if (split !== -1) {
+        const from = data.slice(0, split);
+        const text = data.slice(split + 1).trim();
+        logMessage(from, text);
       } else {
-        alert("Not connected.");
+        logMessage("Host", data);
       }
-      document.getElementById('message').value = '';
-    }
+    });
 
-    function logMessage(sender, text) {
-      const log = document.getElementById('log');
-      const div = document.createElement('div');
-      div.className = sender.includes("You") ? 'message me' : 'message other';
-      div.innerHTML = `<strong>${sender}:</strong> ${escapeHtml(text)}`;
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
-    }
+    connToHost.on('close', () => {
+      alert("Disconnected from host.");
+      logSystem("Connection closed.");
+    });
 
-    function logSystem(text) {
-      const log = document.getElementById('log');
-      const div = document.createElement('div');
-      div.style.color = '#777';
-      div.style.fontStyle = 'italic';
-      div.textContent = text;
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
-    }
+    connToHost.on('error', err => alert('Connection error: ' + err));
+  });
+}
 
-    function escapeHtml(text) {
-      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
-                 .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
-                 .replace(/'/g, "&#039;");
-    }
+function send() {
+  const msg = document.getElementById('message').value.trim();
+  if (!msg) return;
 
-    function generateRandomUserId(length = 6) {
-      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-      let id = 'user_';
-      for (let i = 0; i < length; i++) {
-        id += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return id;
+  if (isHost) {
+    logMessage("You (Host)", msg);
+    for (const id in connections) {
+      connections[id].send(`Host: ${msg}`);
     }
+  } else if (connToHost && connToHost.open) {
+    connToHost.send(msg);
+    logMessage("You", msg);
+  } else {
+    alert("You are not connected.");
+  }
+  document.getElementById('message').value = '';
+}
 
-    function updateUserList() {
-      const list = document.getElementById('userList');
-      list.innerHTML = '';
-      Object.keys(connections).forEach(id => {
-        const div = document.createElement('div');
-        div.className = 'user-item';
-        div.textContent = id;
-        list.appendChild(div);
-      });
-    }
+function logMessage(sender, text) {
+  const log = document.getElementById('log');
+  const row = document.createElement('div');
+  row.className = sender === "You" || sender === "You (Host)" ? 'message me' : 'message other';
+  row.textContent = `${sender}: ${text}`;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+
+function logSystem(text) {
+  const log = document.getElementById('log');
+  const row = document.createElement('div');
+  row.style.color = '#777';
+  row.style.fontStyle = 'italic';
+  row.textContent = text;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+}
+
+function generateRandomUserId(length = 6) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let id = 'user_';
+  for (let i = 0; i < length; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return id;
+}
+
+function updateUserList() {
+  const userList = document.getElementById("userList");
+  userList.innerHTML = "";
+  for (const id in connections) {
+    const div = document.createElement("div");
+    div.className = "user-item";
+    div.textContent = id;
+    userList.appendChild(div);
+  }
+}
+
   </script>
 </body>
 </html>
-
