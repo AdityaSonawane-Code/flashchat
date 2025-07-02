@@ -1,1 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Adium Style FlashChat</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .chat-wrapper {
+      display: flex;
+      flex-direction: column;
+      width: 90%;
+      max-width: 960px;
+      height: 100%;
+      background: #fff;
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .controls {
+      padding: 15px;
+      background: #e9e9e9;
+      border-bottom: 1px solid #ccc;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .controls input,
+    .controls select,
+    .controls button {
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+
+    .main-chat {
+      display: flex;
+      flex: 1;
+    }
+
+    .sidebar {
+      width: 30%;
+      background: #f7f7f7;
+      border-right: 1px solid #ddd;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar h3 {
+      margin: 0;
+      padding: 15px;
+      background: #e0e0e0;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .user-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+
+    .user-item {
+      padding: 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .user-item:hover {
+      background: #eee;
+    }
+
+    .chat-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #f4f4f4;
+    }
+
+    .chat-header {
+      padding: 10px 15px;
+      background: #e9e9e9;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .chat-body {
+      flex: 1;
+      padding: 15px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .message {
+      padding: 10px 15px;
+      border-radius: 15px;
+      max-width: 70%;
+      display: inline-block;
+    }
+
+    .message.me {
+      background: #dcf8c6;
+      align-self: flex-end;
+    }
+
+    .message.other {
+      background: #fff;
+      align-self: flex-start;
+    }
+
+    .chat-footer {
+      padding: 10px 15px;
+      border-top: 1px solid #ccc;
+      display: flex;
+      gap: 10px;
+    }
+
+    .chat-footer input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 20px;
+    }
+
+    .chat-footer button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 20px;
+      background: #007bff;
+      color: #fff;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-wrapper">
+    <div class="controls">
+      <select id="chatMode">
+        <option value="group">Group Chat</option>
+        <option value="private">Private Chat</option>
+      </select>
+      <input type="text" id="groupCode" placeholder="Enter group/friend code" />
+      <button onclick="generateCode()">Generate Code</button>
+      <button onclick="startHost()">Start Chat</button>
+      <button onclick="joinGroup()">Connect</button>
+    </div>
+
+    <div class="main-chat">
+      <div class="sidebar">
+        <h3>Users</h3>
+        <div class="user-list" id="userList">
+          <!-- Dynamic user items -->
+        </div>
+      </div>
+      <div class="chat-panel">
+        <div class="chat-header">
+          <strong id="chatTitle">FlashChat</strong>
+        </div>
+        <div class="chat-body" id="log">
+          <!-- Chat messages -->
+        </div>
+        <div class="chat-footer">
+          <input id="message" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter') send()" />
+          <button onclick="send()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let peer;
+    let connections = {};
+    let connToHost = null;
+    let isHost = false;
+    let userId = null;
+    let mode = 'group';
+
+    document.getElementById('chatMode').addEventListener('change', e => {
+      mode = e.target.value;
+    });
+
+    function generateCode(length = 8) {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let code = '';
+      for (let i = 0; i < length; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      document.getElementById('groupCode').value = code;
+      alert(`Generated Code: ${code}`);
+    }
+
+    function startHost() {
+      const code = document.getElementById('groupCode').value.trim();
+      if (!code) return alert("Enter or generate a code first.");
+      isHost = true;
+      userId = code;
+      peer = new Peer(userId);
+
+      peer.on('open', id => {
+        logSystem(`Host started with ID: ${id}`);
+      });
+
+      peer.on('connection', conn => {
+        if (mode === 'private' && Object.keys(connections).length >= 1) {
+          conn.send("Private chat full. Only 2 users allowed.");
+          conn.close();
+          return;
+        }
+
+        connections[conn.peer] = conn;
+        updateUserList();
+        logSystem(`User connected: ${conn.peer}`);
+
+        conn.on('data', data => {
+          logMessage(conn.peer, data);
+          if (mode === 'group') {
+            for (const peerId in connections) {
+              if (peerId !== conn.peer) {
+                connections[peerId].send(`${conn.peer}: ${data}`);
+              }
+            }
+          } else if (mode === 'private') {
+            for (const peerId in connections) {
+              if (peerId !== conn.peer) {
+                connections[peerId].send(`${conn.peer}: ${data}`);
+              }
+            }
+          }
+        });
+
+        conn.on('close', () => {
+          delete connections[conn.peer];
+          updateUserList();
+          logSystem(`${conn.peer} disconnected.`);
+        });
+      });
+    }
+
+    function joinGroup() {
+      const code = document.getElementById('groupCode').value.trim();
+      if (!code) return alert("Enter the code to connect.");
+      if (isHost) return alert("You are the host.");
+
+      userId = generateRandomUserId();
+      peer = new Peer(userId);
+
+      peer.on('open', id => {
+        connToHost = peer.connect(code);
+
+        connToHost.on('open', () => {
+          logSystem(`Connected to ${code}`);
+        });
+
+        connToHost.on('data', data => {
+          const split = data.indexOf(':');
+          if (split !== -1) {
+            const from = data.slice(0, split);
+            const text = data.slice(split + 1).trim();
+            logMessage(from, text);
+          } else {
+            logMessage("Host", data);
+          }
+        });
+
+        connToHost.on('close', () => {
+          logSystem("Disconnected from host.");
+        });
+      });
+    }
+
+    function send() {
+      const msg = document.getElementById('message').value.trim();
+      if (!msg) return;
+      if (isHost) {
+        logMessage("You (Host)", msg);
+        for (const id in connections) {
+          connections[id].send(`Host: ${msg}`);
+        }
+      } else if (connToHost && connToHost.open) {
+        connToHost.send(msg);
+        logMessage("You", msg);
+      } else {
+        alert("Not connected.");
+      }
+      document.getElementById('message').value = '';
+    }
+
+    function logMessage(sender, text) {
+      const log = document.getElementById('log');
+      const div = document.createElement('div');
+      div.className = sender.includes("You") ? 'message me' : 'message other';
+      div.innerHTML = `<strong>${sender}:</strong> ${escapeHtml(text)}`;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function logSystem(text) {
+      const log = document.getElementById('log');
+      const div = document.createElement('div');
+      div.style.color = '#777';
+      div.style.fontStyle = 'italic';
+      div.textContent = text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+    }
+
+    function generateRandomUserId(length = 6) {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let id = 'user_';
+      for (let i = 0; i < length; i++) {
+        id += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return id;
+    }
+
+    function updateUserList() {
+      const list = document.getElementById('userList');
+      list.innerHTML = '';
+      Object.keys(connections).forEach(id => {
+        const div = document.createElement('div');
+        div.className = 'user-item';
+        div.textContent = id;
+        list.appendChild(div);
+      });
+    }
+  </script>
+</body>
+</html>
 
