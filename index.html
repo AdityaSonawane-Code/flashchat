@@ -46,11 +46,14 @@
       border-radius: 6px;
       border: 1px solid #ccc;
       font-size: 14px;
+      flex: 1;
+      min-width: 120px;
     }
 
     .main-chat {
       display: flex;
       flex: 1;
+      flex-direction: row;
     }
 
     .sidebar {
@@ -144,6 +147,34 @@
       background: #007bff;
       color: #fff;
       cursor: pointer;
+    }
+
+    @media (max-width: 768px) {
+      .main-chat {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+      }
+
+      .chat-footer {
+        flex-direction: column;
+      }
+
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .controls input,
+      .controls select,
+      .controls button {
+        flex: none;
+        width: 100%;
+      }
     }
   </style>
 </head>
