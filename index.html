@@ -6,166 +6,237 @@
   <title>Adium Style FlashChat</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, sans-serif;
-      background: #f0f0f0;
-      margin: 0;
-      padding: 0;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .chat-wrapper {
-      display: flex;
-      flex-direction: column;
-      width: 90%;
-      max-width: 960px;
-      height: 100%;
-      background: #fff;
-      box-shadow: 0 0 15px rgba(0,0,0,0.2);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .controls {
-      padding: 15px;
-      background: #e9e9e9;
-      border-bottom: 1px solid #ccc;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-    }
-    .controls input,
-    .controls select,
-    .controls button {
-      padding: 8px 12px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 14px;
-      flex: 1;
-      min-width: 120px;
-    }
-    .main-chat {
-      display: flex;
-      flex: 1;
-      flex-direction: row;
-    }
-    .sidebar {
-      width: 30%;
-      background: #f7f7f7;
-      border-right: 1px solid #ddd;
-      display: flex;
-      flex-direction: column;
-    }
-    .sidebar h3 {
-      margin: 0;
-      padding: 15px;
-      background: #e0e0e0;
-      border-bottom: 1px solid #ccc;
-    }
-    .user-list {
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px;
-    }
-    .user-item {
-      padding: 10px;
-      cursor: pointer;
-      border-bottom: 1px solid #ddd;
-    }
-    .user-item:hover { background: #eee; }
-    .chat-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background: #f4f4f4;
-    }
-    .chat-header {
-      padding: 10px 15px;
-      background: #e9e9e9;
-      border-bottom: 1px solid #ccc;
-    }
-    .chat-body {
-      flex: 1;
-      padding: 15px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      scroll-behavior: smooth; /* smooth scroll */
-    }
-    .chat-body::-webkit-scrollbar {
-      width: 8px;
-    }
-    .chat-body::-webkit-scrollbar-thumb {
-      background: #bbb;
-      border-radius: 4px;
-    }
-    .chat-body::-webkit-scrollbar-thumb:hover {
-      background: #888;
-    }
-    .message {
-      padding: 10px 15px;
-      border-radius: 15px;
-      max-width: 70%;
-      word-wrap: break-word;
-    }
-    .message.me { background: #dcf8c6; align-self: flex-end; }
-    .message.other { background: #fff; align-self: flex-start; }
-    .chat-footer {
-      padding: 10px 15px;
-      border-top: 1px solid #ccc;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-    .chat-footer input[type="text"] {
-      flex: 1;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 20px;
-    }
-    .chat-footer button {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 20px;
-      background: #007bff;
-      color: #fff;
-      cursor: pointer;
-    }
-    .chat-footer input[type="file"] {
-      display: none;
-    }
-    .file-label {
-      background: #28a745;
-      color: #fff;
-      padding: 10px 15px;
-      border-radius: 20px;
-      cursor: pointer;
-    }
-    #scrollToBottom {
-      position: absolute;
-      right: 30px;
-      bottom: 80px;
-      background: #007bff;
-      color: #fff;
-      border: none;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      cursor: pointer;
-      display: none;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    }
-    @media (max-width: 768px) {
-      .main-chat { flex-direction: column; }
-      .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #ddd; }
-      .chat-footer { flex-direction: column; }
-      .controls { flex-direction: column; align-items: stretch; }
-      .controls input, .controls select, .controls button { flex: none; width: 100%; }
-    }
-  </style>
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: #f0f0f0;
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .chat-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 90%;
+    max-width: 960px;
+    height: 100%;
+    background: #fff;
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .controls {
+    padding: 15px;
+    background: #e9e9e9;
+    border-bottom: 1px solid #ccc;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .controls input,
+  .controls select,
+  .controls button {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .main-chat {
+    display: flex;
+    flex: 1;
+    flex-direction: row;
+    min-height: 0; /* ensures children can shrink on smaller screens */
+  }
+
+  .sidebar {
+    width: 30%;
+    background: #f7f7f7;
+    border-right: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .sidebar h3 {
+    margin: 0;
+    padding: 15px;
+    background: #e0e0e0;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .user-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    min-height: 0;
+  }
+
+  .user-item {
+    padding: 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .user-item:hover { background: #eee; }
+
+  /* IMPORTANT: allow the chat-panel children to size correctly (fixes scrolling collapse) */
+  .chat-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #f4f4f4;
+    position: relative;   /* for absolutely-positioned buttons inside */
+    min-height: 0;        /* <- critical for flex overflow to work correctly */
+  }
+
+  .chat-header {
+    padding: 10px 15px;
+    background: #e9e9e9;
+    border-bottom: 1px solid #ccc;
+  }
+
+  /* The actual scrolling area */
+  .chat-body {
+    flex: 1;
+    padding: 15px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scroll-behavior: smooth; /* smooth scroll when jumping */
+    min-height: 0;           /* <- critical */
+    -webkit-overflow-scrolling: touch; /* momentum scrolling on iOS */
+    align-items: flex-start;
+  }
+
+  .chat-body::-webkit-scrollbar {
+    width: 8px;
+  }
+  .chat-body::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .chat-body::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.12);
+    border-radius: 6px;
+  }
+  .chat-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(0,0,0,0.18);
+  }
+
+  .message {
+    padding: 10px 15px;
+    border-radius: 15px;
+    max-width: 70%;
+    word-wrap: break-word;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    line-height: 1.3;
+  }
+
+  .message.me {
+    background: #dcf8c6;
+    align-self: flex-end;
+  }
+  .message.other {
+    background: #fff;
+    align-self: flex-start;
+  }
+
+  /* Media handling inside messages */
+  .message img,
+  .message video {
+    display: block;
+    max-width: 320px;      /* preview max width */
+    width: auto;
+    height: auto;
+    border-radius: 8px;
+    margin-top: 8px;
+  }
+
+  .message audio {
+    display: block;
+    margin-top: 8px;
+  }
+
+  /* footer should not grow; keep it fixed at bottom of chat-panel */
+  .chat-footer {
+    padding: 10px 15px;
+    border-top: 1px solid #ccc;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex: none; /* ensure footer doesn't stretch */
+    background: #fff;
+  }
+
+  .chat-footer input[type="text"] {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 20px;
+  }
+
+  .chat-footer button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    background: #007bff;
+    color: #fff;
+    cursor: pointer;
+  }
+
+  .chat-footer input[type="file"] {
+    display: none;
+  }
+
+  .file-label {
+    background: #28a745;
+    color: #fff;
+    padding: 10px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+  }
+
+  /* Floating scroll-to-bottom button (positioned relative to .chat-panel) */
+  #scrollToBottom {
+    position: absolute;
+    right: 20px;
+    bottom: 82px; /* sits above the footer */
+    background: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: none;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  /* small screens adjustments */
+  @media (max-width: 768px) {
+    .main-chat { flex-direction: column; }
+    .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #ddd; }
+    .chat-footer { flex-direction: column; gap: 8px; }
+    .controls { flex-direction: column; align-items: stretch; }
+    .controls input, .controls select, .controls button { flex: none; width: 100%; }
+    .message img, .message video { max-width: 80%; }
+    #scrollToBottom { right: 12px; bottom: 120px; }
+  }
+</style>
+
 </head>
 <body>
   <div class="chat-wrapper">
