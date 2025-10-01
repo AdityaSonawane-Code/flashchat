@@ -93,7 +93,17 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-height: 100%;
+      scroll-behavior: smooth; /* smooth scroll */
+    }
+    .chat-body::-webkit-scrollbar {
+      width: 8px;
+    }
+    .chat-body::-webkit-scrollbar-thumb {
+      background: #bbb;
+      border-radius: 4px;
+    }
+    .chat-body::-webkit-scrollbar-thumb:hover {
+      background: #888;
     }
     .message {
       padding: 10px 15px;
@@ -103,7 +113,6 @@
     }
     .message.me { background: #dcf8c6; align-self: flex-end; }
     .message.other { background: #fff; align-self: flex-start; }
-    .message img { max-width: 200px; max-height: 200px; border-radius: 8px; display: block; }
     .chat-footer {
       padding: 10px 15px;
       border-top: 1px solid #ccc;
@@ -135,6 +144,20 @@
       border-radius: 20px;
       cursor: pointer;
     }
+    #scrollToBottom {
+      position: absolute;
+      right: 30px;
+      bottom: 80px;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+      display: none;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
     @media (max-width: 768px) {
       .main-chat { flex-direction: column; }
       .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #ddd; }
@@ -164,6 +187,7 @@
       <div class="chat-panel">
         <div class="chat-header"><strong id="chatTitle">FlashChat</strong></div>
         <div class="chat-body" id="log"></div>
+        <button id="scrollToBottom">↓</button>
         <div class="chat-footer">
           <input id="message" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter') send()" />
           <input type="file" id="fileInput" />
@@ -271,7 +295,7 @@ function displayData(sender, data) {
   else if (data.type === "file") {
     const blob = new Blob([data.buffer], {type:data.mime});
     const url = URL.createObjectURL(blob);
-    if (data.mime.startsWith("image/")) logMedia(sender, `<img src="${url}">`);
+    if (data.mime.startsWith("image/")) logMedia(sender, `<img src="${url}" style="max-width:200px; border-radius:8px;">`);
     else if (data.mime.startsWith("audio/")) logMedia(sender, `<audio controls src="${url}"></audio>`);
     else logMedia(sender, `<a href="${url}" download="${data.name}">📎 ${data.name}</a>`);
   }
@@ -282,7 +306,7 @@ function logMessage(sender, text) {
   const row = document.createElement('div');
   row.className = sender.includes("You") ? 'message me' : 'message other';
   row.textContent = `${sender}: ${text}`;
-  log.appendChild(row); log.scrollTop = log.scrollHeight;
+  log.appendChild(row); autoScroll();
 }
 
 function logMedia(sender, html) {
@@ -290,15 +314,38 @@ function logMedia(sender, html) {
   const row = document.createElement('div');
   row.className = sender.includes("You") ? 'message me' : 'message other';
   row.innerHTML = `<b>${sender}:</b><br>${html}`;
-  log.appendChild(row); log.scrollTop = log.scrollHeight;
+  log.appendChild(row); autoScroll();
 }
 
 function logSystem(text) {
   const log = document.getElementById('log');
   const row = document.createElement('div');
   row.style.color = '#777'; row.style.fontStyle = 'italic'; row.textContent = text;
-  log.appendChild(row); log.scrollTop = log.scrollHeight;
+  log.appendChild(row); autoScroll();
 }
+
+// ✅ Scroll handling
+const logDiv = document.getElementById("log");
+const scrollBtn = document.getElementById("scrollToBottom");
+
+function autoScroll() {
+  if (logDiv.scrollTop + logDiv.clientHeight >= logDiv.scrollHeight - 100) {
+    logDiv.scrollTop = logDiv.scrollHeight;
+  } else {
+    scrollBtn.style.display = "block";
+  }
+}
+
+logDiv.addEventListener("scroll", () => {
+  if (logDiv.scrollTop + logDiv.clientHeight >= logDiv.scrollHeight - 50) {
+    scrollBtn.style.display = "none";
+  }
+});
+
+scrollBtn.addEventListener("click", () => {
+  logDiv.scrollTop = logDiv.scrollHeight;
+  scrollBtn.style.display = "none";
+});
 
 function updateUserList() {
   const userList = document.getElementById("userList"); userList.innerHTML = "";
