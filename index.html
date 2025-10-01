@@ -93,6 +93,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      max-height: 100%;
     }
     .message {
       padding: 10px 15px;
@@ -102,6 +103,7 @@
     }
     .message.me { background: #dcf8c6; align-self: flex-end; }
     .message.other { background: #fff; align-self: flex-start; }
+    .message img { max-width: 200px; max-height: 200px; border-radius: 8px; display: block; }
     .chat-footer {
       padding: 10px 15px;
       border-top: 1px solid #ccc;
@@ -269,7 +271,7 @@ function displayData(sender, data) {
   else if (data.type === "file") {
     const blob = new Blob([data.buffer], {type:data.mime});
     const url = URL.createObjectURL(blob);
-    if (data.mime.startsWith("image/")) logMedia(sender, `<img src="${url}" style="max-width:200px; border-radius:8px;">`);
+    if (data.mime.startsWith("image/")) logMedia(sender, `<img src="${url}">`);
     else if (data.mime.startsWith("audio/")) logMedia(sender, `<audio controls src="${url}"></audio>`);
     else logMedia(sender, `<a href="${url}" download="${data.name}">📎 ${data.name}</a>`);
   }
