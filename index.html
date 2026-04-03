@@ -275,7 +275,9 @@ let peer, connections = {}, connToHost = null;
 let isHost = false, userId = null, mode = 'group';
 let username = "Anonymous";
 let userNames = {}; // peerId -> username
+let hostId = null;
 
+// ================= MODE =================
 document.getElementById('chatMode').addEventListener('change', e => {
   mode = e.target.value;
   updateButtons();
@@ -284,18 +286,22 @@ document.getElementById('chatMode').addEventListener('change', e => {
 function updateButtons() {
   const mode = document.getElementById("chatMode").value;
   document.getElementById("startButton").textContent = "Start Chat";
-  document.getElementById("joinButton").textContent = mode === 'private' ? "Connect" : "Join Group";
+  document.getElementById("joinButton").textContent =
+    mode === 'private' ? "Connect" : "Join Group";
 }
 
+// ================= CODE =================
 function generateCode(length = 8) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let code = '';
-  for (let i = 0; i < length; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < length; i++)
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+
   document.getElementById('groupCode').value = code;
   alert(`Code generated: ${code}`);
 }
 
-// ================= CHECK HOST EXISTS =================
+// ================= CHECK HOST =================
 function checkHostExists(code, callback) {
   const tempPeer = new Peer();
 
@@ -305,6 +311,10 @@ function checkHostExists(code, callback) {
 
     conn.on('open', () => {
       exists = true;
+
+      // mark as check connection
+      conn.send({ type: "check" });
+
       conn.close();
       tempPeer.destroy();
       callback(true);
@@ -314,10 +324,10 @@ function checkHostExists(code, callback) {
 
     setTimeout(() => {
       if (!exists) {
-        tempPeer.destroy();
+        try { tempPeer.destroy(); } catch(e){}
         callback(false);
       }
-    }, 1200);
+    }, 1800);
   });
 }
 
@@ -325,7 +335,8 @@ function checkHostExists(code, callback) {
 function broadcastUserList() {
   const data = {
     type: "userList",
-    users: userNames
+    users: userNames,
+    hostId: hostId
   };
 
   for (const id in connections) {
@@ -349,9 +360,11 @@ function startHost() {
 
     isHost = true;
     userId = code;
-    peer = new Peer(userId);
+    hostId = userId;
 
+    peer = new Peer(userId);
     userNames[userId] = username;
+
     document.getElementById("chatTitle").textContent = "Host: " + username;
 
     peer.on('open', () => {
@@ -363,6 +376,11 @@ function startHost() {
       connections[conn.peer] = conn;
 
       conn.on('data', data => {
+
+        // ✅ ignore temp check connection
+        if (data.type === "check") return;
+
+        // ✅ user join
         if (data.type === "intro") {
           userNames[conn.peer] = data.name;
           logSystem(`${data.name} joined`);
@@ -376,7 +394,11 @@ function startHost() {
       });
 
       conn.on('close', () => {
-        logSystem(`${userNames[conn.peer]} left`);
+        // ✅ prevent undefined left
+        if (userNames[conn.peer]) {
+          logSystem(`${userNames[conn.peer]} left`);
+        }
+
         delete connections[conn.peer];
         delete userNames[conn.peer];
 
@@ -395,6 +417,8 @@ function joinGroup() {
   if (!code) return alert("Enter a code to join.");
   if (isHost) return alert("You are already host.");
 
+  logSystem("Checking room...");
+
   checkHostExists(code, (exists) => {
 
     if (!exists) {
@@ -404,7 +428,6 @@ function joinGroup() {
 
     userId = generateRandomUserId();
     peer = new Peer(userId);
-
     userNames[userId] = username;
 
     peer.on('open', () => {
@@ -489,8 +512,10 @@ function handleIncomingData(sender, data) {
 function displayData(sender, data) {
   if (!data) return;
 
+  // ✅ sync user list
   if (data.type === "userList") {
     userNames = data.users;
+    hostId = data.hostId;
     updateUserList();
     return;
   }
@@ -548,7 +573,6 @@ function logSystem(text) {
 
 // ================= SCROLL =================
 const logDiv = document.getElementById("log");
-const scrollBtn = document.getElementById("scrollToBottom");
 
 function autoScroll() {
   logDiv.scrollTop = logDiv.scrollHeight;
@@ -563,8 +587,9 @@ function updateUserList() {
     const div = document.createElement("div");
 
     let name = userNames[id];
+
     if (id === userId) name += " (You)";
-    if (id === Object.keys(userNames)[0]) name += " 👑";
+    if (id === hostId) name += " 👑";
 
     div.textContent = name;
     userList.appendChild(div);
@@ -575,9 +600,11 @@ function updateUserList() {
 function generateRandomUserId(length = 6) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let id = 'user_';
+
   for (let i = 0; i < length; i++) {
     id += chars.charAt(Math.floor(Math.random() * chars.length));
   }
+
   return id;
 }
 </script>
