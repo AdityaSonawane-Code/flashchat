@@ -272,98 +272,143 @@
 
 <script>
 let peer, connections = {}, connToHost = null;
-let isHost = false, userId = null;
+let isHost = false, userId = null, mode = 'group';
 let username = "Anonymous";
 let userNames = {};
 let hostId = null;
 
-// ================= HOST CHECK =================
-function checkHostExists(code, callback) {
-  const temp = new Peer();
+// ================= MODE =================
+document.getElementById('chatMode').addEventListener('change', e => {
+  mode = e.target.value;
+  updateButtons();
+});
 
-  temp.on('open', () => {
-    const conn = temp.connect(code);
-    let done = false;
+function updateButtons() {
+  const mode = document.getElementById("chatMode").value;
+  document.getElementById("startButton").textContent = "Start Chat";
+  document.getElementById("joinButton").textContent =
+    mode === 'private' ? "Connect" : "Join Group";
+}
+
+// ================= CODE =================
+function generateCode(length = 8) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let code = '';
+  for (let i = 0; i < length; i++)
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+
+  document.getElementById('groupCode').value = code;
+  alert(`Code generated: ${code}`);
+}
+
+// ================= CHECK HOST =================
+function checkHostExists(code, callback) {
+  const tempPeer = new Peer();
+
+  tempPeer.on('open', () => {
+    const conn = tempPeer.connect(code);
+    let exists = false;
 
     conn.on('open', () => {
-      done = true;
+      exists = true;
+      conn.send({ type: "check" });
       conn.close();
-      temp.destroy();
+      tempPeer.destroy();
       callback(true);
     });
 
     setTimeout(() => {
-      if (!done) {
-        temp.destroy();
+      if (!exists) {
+        try { tempPeer.destroy(); } catch(e){}
         callback(false);
       }
     }, 1500);
   });
 }
 
+// ================= BROADCAST =================
+function broadcastUserList() {
+  const data = {
+    type: "userList",
+    users: userNames,
+    hostId: hostId
+  };
+
+  for (const id in connections) {
+    connections[id].send(data);
+  }
+}
+
 // ================= HOST =================
 function startHost() {
-  username = document.getElementById('username').value || "Host";
-  const code = document.getElementById('groupCode').value;
+  username = document.getElementById('username').value.trim() || "Host";
+  const code = document.getElementById('groupCode').value.trim();
 
-  if (!code) return alert("Enter code");
+  if (!code) return alert("Enter code first.");
 
-  checkHostExists(code, exists => {
-    if (exists) return alert("Chat already exists. Join instead.");
+  checkHostExists(code, (exists) => {
+    if (exists) {
+      alert("Chat already exists. You can only join.");
+      return;
+    }
 
     isHost = true;
     userId = code;
-    hostId = code;
+    hostId = userId;
 
-    peer = new Peer(code);
+    peer = new Peer(userId);
     userNames[userId] = username;
+
+    document.getElementById("chatTitle").textContent = "Host: " + username;
+
+    peer.on('open', () => {
+      logSystem("Host started");
+      updateUserList();
+    });
 
     peer.on('connection', conn => {
 
-      connections[conn.peer] = conn;
-
       conn.on('data', data => {
 
-        // 🔥 JOIN REQUEST
+        if (data.type === "check") return;
+
+        // ✅ JOIN REQUEST
         if (data.type === "joinRequest") {
+          const allow = confirm(`${data.name} wants to join. Allow?`);
 
-          const allow = confirm(`${data.name} wants to join`);
+          if (allow) {
+            connections[conn.peer] = conn;
+            userNames[conn.peer] = data.name;
 
-          if (!allow) {
-            conn.send({ type: "rejected" });
+            conn.send({
+              type: "joinAccepted",
+              users: userNames,
+              hostId: hostId
+            });
+
+            logSystem(`${data.name} joined`);
+            updateUserList();
+            broadcastUserList();
+          } else {
+            conn.send({ type: "joinRejected" });
             conn.close();
-            return;
           }
-
-          userNames[conn.peer] = data.name;
-
-          conn.send({
-            type: "accepted",
-            users: userNames,
-            hostId: hostId
-          });
-
-          broadcastUsers();
-          updateUserList();
-          logSystem(data.name + " joined");
-
           return;
         }
 
-        // NORMAL MESSAGE
-        handleIncoming(conn.peer, data);
+        handleIncomingData(conn.peer, data);
       });
 
       conn.on('close', () => {
         if (userNames[conn.peer]) {
-          logSystem(userNames[conn.peer] + " left");
+          logSystem(`${userNames[conn.peer]} left`);
         }
 
         delete connections[conn.peer];
         delete userNames[conn.peer];
 
         updateUserList();
-        broadcastUsers();
+        broadcastUserList();
       });
     });
   });
@@ -371,16 +416,20 @@ function startHost() {
 
 // ================= JOIN =================
 function joinGroup() {
-  username = document.getElementById('username').value || "User";
-  const code = document.getElementById('groupCode').value;
+  username = document.getElementById('username').value.trim() || "User";
+  const code = document.getElementById('groupCode').value.trim();
 
-  if (!code) return alert("Enter code");
+  if (!code) return alert("Enter code.");
+  if (isHost) return alert("You are host.");
 
-  checkHostExists(code, exists => {
+  checkHostExists(code, (exists) => {
 
-    if (!exists) return alert("Chat not started");
+    if (!exists) {
+      alert("Chat is not started yet.");
+      return;
+    }
 
-    userId = "user_" + Math.random().toString(36).slice(2, 8);
+    userId = generateRandomUserId();
     peer = new Peer(userId);
 
     peer.on('open', () => {
@@ -391,34 +440,30 @@ function joinGroup() {
           type: "joinRequest",
           name: username
         });
+
+        logSystem("Waiting for host approval...");
       });
 
       connToHost.on('data', data => {
 
-        if (data.type === "rejected") {
-          alert("Host rejected you");
-          connToHost.close();
-          return;
-        }
-
-        if (data.type === "accepted") {
+        if (data.type === "joinAccepted") {
           userNames = data.users;
           hostId = data.hostId;
 
           userNames[userId] = username;
 
           updateUserList();
-          logSystem("Joined chat");
+          logSystem("Joined successfully!");
           return;
         }
 
-        if (data.type === "userList") {
-          userNames = data.users;
-          updateUserList();
+        if (data.type === "joinRejected") {
+          alert("Host rejected your request.");
+          connToHost.close();
           return;
         }
 
-        displayData(data);
+        handleIncomingData("Host", data);
       });
     });
   });
@@ -426,44 +471,58 @@ function joinGroup() {
 
 // ================= SEND =================
 function send() {
-  const msg = document.getElementById('message').value;
+  const msg = document.getElementById('message').value.trim();
   if (!msg) return;
 
-  const data = {
+  sendData({
     type: "text",
     text: msg,
     name: username
-  };
-
-  if (isHost) {
-    displayData(data);
-    for (let id in connections) connections[id].send(data);
-  } else {
-    connToHost.send(data);
-    displayData(data);
-  }
+  });
 
   document.getElementById('message').value = '';
 }
 
-// ================= BROADCAST =================
-function broadcastUsers() {
-  const data = {
-    type: "userList",
-    users: userNames
+// ================= FILE =================
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    sendData({
+      type: "file",
+      fileName: file.name,
+      mime: file.type,
+      buffer: reader.result,
+      name: username
+    });
   };
 
-  for (let id in connections) {
-    connections[id].send(data);
+  reader.readAsArrayBuffer(file);
+  e.target.value = "";
+});
+
+// ================= DATA =================
+function sendData(data) {
+  if (isHost) {
+    displayData(username + " (Host)", data);
+
+    for (const id in connections) {
+      connections[id].send(data);
+    }
+
+  } else if (connToHost && connToHost.open) {
+    connToHost.send(data);
+    displayData("You", data);
   }
 }
 
-// ================= HANDLE =================
-function handleIncoming(sender, data) {
-  displayData(data);
+function handleIncomingData(sender, data) {
+  displayData(sender, data);
 
   if (isHost) {
-    for (let id in connections) {
+    for (const id in connections) {
       if (id !== sender) {
         connections[id].send(data);
       }
@@ -472,59 +531,108 @@ function handleIncoming(sender, data) {
 }
 
 // ================= DISPLAY =================
-function displayData(data) {
+function displayData(sender, data) {
+  if (!data) return;
+
+  if (data.type === "userList") {
+    userNames = data.users;
+    hostId = data.hostId;
+    updateUserList();
+    return;
+  }
+
+  const displayName = data.name || userNames[sender] || sender;
+
   if (data.type === "text") {
-    logMessage(data.name, data.text);
+    logMessage(displayName, data.text);
+  }
+  else if (data.type === "file") {
+    const blob = new Blob([data.buffer], {type: data.mime});
+    const url = URL.createObjectURL(blob);
+
+    if (data.mime.startsWith("image/"))
+      logMedia(displayName, `<img src="${url}" style="max-width:200px;">`);
+    else
+      logMedia(displayName, `<a href="${url}" download="${data.fileName}">📎 ${data.fileName}</a>`);
   }
 }
 
 // ================= UI =================
-function logMessage(name, text) {
+function logMessage(sender, text) {
   const log = document.getElementById('log');
-  const div = document.createElement('div');
+  const row = document.createElement('div');
 
-  div.textContent = `${name}: ${text}`;
-  log.appendChild(div);
+  row.className = sender === username ? 'message me' : 'message other';
+  row.textContent = `${sender}: ${text}`;
+
+  log.appendChild(row);
+}
+
+function logMedia(sender, html) {
+  const log = document.getElementById('log');
+  const row = document.createElement('div');
+
+  row.className = sender === username ? 'message me' : 'message other';
+  row.innerHTML = `<b>${sender}:</b><br>${html}`;
+
+  log.appendChild(row);
 }
 
 function logSystem(text) {
   const log = document.getElementById('log');
-  const div = document.createElement('div');
+  const row = document.createElement('div');
 
-  div.style.color = "gray";
-  div.textContent = text;
-  log.appendChild(div);
+  row.style.color = '#777';
+  row.style.fontStyle = 'italic';
+  row.textContent = text;
+
+  log.appendChild(row);
 }
 
 // ================= USERS =================
 function updateUserList() {
-  const list = document.getElementById('userList');
-  list.innerHTML = "";
+  const userList = document.getElementById("userList");
+  userList.innerHTML = "";
 
-  for (let id in userNames) {
-    const div = document.createElement('div');
+  for (const id in userNames) {
+    const div = document.createElement("div");
 
     let name = userNames[id];
 
     if (id === userId) name += " (You)";
     if (id === hostId) name += " 👑";
 
-    // KICK
     if (isHost && id !== hostId) {
       div.style.cursor = "pointer";
       div.onclick = () => kickUser(id);
     }
 
     div.textContent = name;
-    list.appendChild(div);
+    userList.appendChild(div);
   }
 }
 
 // ================= KICK =================
 function kickUser(id) {
-  if (!connections[id]) return;
+  if (!isHost) return;
 
-  connections[id].send({ type: "rejected" });
-  connections[id].close();
+  if (confirm("Remove this user?")) {
+    if (connections[id]) {
+      connections[id].send({ type: "joinRejected" });
+      connections[id].close();
+    }
+  }
+}
+
+// ================= UTIL =================
+function generateRandomUserId(length = 6) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let id = 'user_';
+
+  for (let i = 0; i < length; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return id;
 }
 </script>
