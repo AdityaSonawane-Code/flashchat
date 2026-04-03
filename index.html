@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Adium Style FlashChat</title>
+  <title>Aditya's FlashChat</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
   body {
@@ -245,7 +245,8 @@
         <option value="group">Group Chat</option>
         <option value="private">Private Chat</option>
       </select>
-      <input type="text" id="groupCode" placeholder="Enter group/friend code" />
+      <input type="text" id="username" placeholder="Enter your name" />
+      <input type="text" id="groupCode" placeholder="Enter code" />
       <button onclick="generateCode()">Generate Code</button>
       <button id="startButton" onclick="startHost()">Start Chat</button>
       <button id="joinButton" onclick="joinGroup()">Connect</button>
@@ -272,6 +273,8 @@
 <script>
 let peer, connections = {}, connToHost = null;
 let isHost = false, userId = null, mode = 'group';
+let username = "Anonymous";
+let userNames = {}; // store peerId -> username
 
 document.getElementById('chatMode').addEventListener('change', e => {
   mode = e.target.value;
@@ -292,110 +295,218 @@ function generateCode(length = 8) {
   alert(`Code generated: ${code}`);
 }
 
+// ================= HOST =================
 function startHost() {
+  username = document.getElementById('username').value.trim() || "Host";
+
   const code = document.getElementById('groupCode').value.trim();
   if (!code) return alert("Enter or generate a code first.");
-  isHost = true; userId = code; peer = new Peer(userId);
 
-  peer.on('open', id => { logSystem(`Host started: ${id}`); alert("You are now the host."); updateUserList(); });
+  isHost = true;
+  userId = code;
+  peer = new Peer(userId);
+
+  userNames[userId] = username;
+
+  peer.on('open', id => {
+    logSystem(`Host started: ${id}`);
+    alert("You are now the host.");
+    updateUserList();
+  });
 
   peer.on('connection', conn => {
     if (mode === 'private' && Object.keys(connections).length >= 1) {
-      conn.send("Only 2 users allowed in private chat."); conn.close(); return;
+      conn.send({type:"system", text:"Only 2 users allowed in private chat."});
+      conn.close();
+      return;
     }
-    connections[conn.peer] = conn; updateUserList();
-    conn.on('data', data => handleIncomingData(conn.peer, data));
-    conn.on('close', () => { logSystem(`Disconnected: ${conn.peer}`); delete connections[conn.peer]; updateUserList(); });
+
+    connections[conn.peer] = conn;
+
+    conn.on('data', data => {
+      // ✅ handle intro (username)
+      if (data.type === "intro") {
+        userNames[conn.peer] = data.name;
+        updateUserList();
+        logSystem(`${data.name} joined`);
+        return;
+      }
+
+      handleIncomingData(conn.peer, data);
+    });
+
+    conn.on('close', () => {
+      logSystem(`${userNames[conn.peer] || conn.peer} disconnected`);
+      delete connections[conn.peer];
+      delete userNames[conn.peer];
+      updateUserList();
+    });
+
+    updateUserList();
   });
+
   peer.on('error', err => alert('Host error: ' + err));
 }
 
+// ================= JOIN =================
 function joinGroup() {
+  username = document.getElementById('username').value.trim() || "User";
+
   const code = document.getElementById('groupCode').value.trim();
   if (!code) return alert("Enter a code to join.");
   if (isHost) return alert("You are already host.");
-  userId = generateRandomUserId(); peer = new Peer(userId);
+
+  userId = generateRandomUserId();
+  peer = new Peer(userId);
+
+  userNames[userId] = username;
 
   peer.on('open', id => {
     connToHost = peer.connect(code);
-    connToHost.on('open', () => logSystem(`Connected to: ${code}`));
+
+    connToHost.on('open', () => {
+      logSystem(`Connected to: ${code}`);
+
+      // ✅ send username to host
+      connToHost.send({
+        type: "intro",
+        name: username
+      });
+    });
+
     connToHost.on('data', data => handleIncomingData("Host", data));
-    connToHost.on('close', () => { alert("Disconnected."); logSystem("Connection closed."); });
+
+    connToHost.on('close', () => {
+      alert("Disconnected.");
+      logSystem("Connection closed.");
+    });
   });
 }
 
+// ================= SEND =================
 function send() {
   const msg = document.getElementById('message').value.trim();
   if (!msg) return;
-  sendData({type:"text", text:msg});
+
+  sendData({
+    type: "text",
+    text: msg,
+    name: username
+  });
+
   document.getElementById('message').value = '';
 }
 
+// ================= FILE =================
 document.getElementById('fileInput').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
+
   const reader = new FileReader();
   reader.onload = () => {
-    const data = {type:"file", name:file.name, mime:file.type, buffer:reader.result};
-    sendData(data);
+    sendData({
+      type: "file",
+      fileName: file.name,
+      mime: file.type,
+      buffer: reader.result,
+      name: username
+    });
   };
+
   reader.readAsArrayBuffer(file);
   e.target.value = "";
 });
 
+// ================= DATA FLOW =================
 function sendData(data) {
   if (isHost) {
-    displayData("You (Host)", data);
-    for (const id in connections) connections[id].send(data);
+    displayData(username + " (Host)", data);
+
+    for (const id in connections) {
+      connections[id].send(data);
+    }
+
   } else if (connToHost && connToHost.open) {
     connToHost.send(data);
     displayData("You", data);
-  } else alert("Not connected.");
+  } else {
+    alert("Not connected.");
+  }
 }
 
 function handleIncomingData(sender, data) {
   displayData(sender, data);
+
   if (isHost) {
-    for (const id in connections) if (id !== sender) connections[id].send(data);
+    for (const id in connections) {
+      if (id !== sender) {
+        connections[id].send(data);
+      }
+    }
   }
 }
 
+// ================= DISPLAY =================
 function displayData(sender, data) {
   if (!data) return;
-  if (data.type === "text") logMessage(sender, data.text);
+
+  const displayName = data.name || userNames[sender] || sender;
+
+  if (data.type === "text") {
+    logMessage(displayName, data.text);
+  }
   else if (data.type === "file") {
-    const blob = new Blob([data.buffer], {type:data.mime});
+    const blob = new Blob([data.buffer], {type: data.mime});
     const url = URL.createObjectURL(blob);
-    if (data.mime.startsWith("image/")) logMedia(sender, `<img src="${url}" style="max-width:200px; border-radius:8px;">`);
-    else if (data.mime.startsWith("audio/")) logMedia(sender, `<audio controls src="${url}"></audio>`);
-    else logMedia(sender, `<a href="${url}" download="${data.name}">📎 ${data.name}</a>`);
+
+    if (data.mime.startsWith("image/"))
+      logMedia(displayName, `<img src="${url}" style="max-width:200px;">`);
+    else if (data.mime.startsWith("audio/"))
+      logMedia(displayName, `<audio controls src="${url}"></audio>`);
+    else
+      logMedia(displayName, `<a href="${url}" download="${data.fileName}">📎 ${data.fileName}</a>`);
+  }
+  else if (data.type === "system") {
+    logSystem(data.text);
   }
 }
 
+// ================= UI =================
 function logMessage(sender, text) {
   const log = document.getElementById('log');
   const row = document.createElement('div');
-  row.className = sender.includes("You") ? 'message me' : 'message other';
+
+  row.className = sender.includes(username) ? 'message me' : 'message other';
   row.textContent = `${sender}: ${text}`;
-  log.appendChild(row); autoScroll();
+
+  log.appendChild(row);
+  autoScroll();
 }
 
 function logMedia(sender, html) {
   const log = document.getElementById('log');
   const row = document.createElement('div');
-  row.className = sender.includes("You") ? 'message me' : 'message other';
+
+  row.className = sender.includes(username) ? 'message me' : 'message other';
   row.innerHTML = `<b>${sender}:</b><br>${html}`;
-  log.appendChild(row); autoScroll();
+
+  log.appendChild(row);
+  autoScroll();
 }
 
 function logSystem(text) {
   const log = document.getElementById('log');
   const row = document.createElement('div');
-  row.style.color = '#777'; row.style.fontStyle = 'italic'; row.textContent = text;
-  log.appendChild(row); autoScroll();
+
+  row.style.color = '#777';
+  row.style.fontStyle = 'italic';
+  row.textContent = text;
+
+  log.appendChild(row);
+  autoScroll();
 }
 
-// ✅ Scroll handling
+// ================= SCROLL =================
 const logDiv = document.getElementById("log");
 const scrollBtn = document.getElementById("scrollToBottom");
 
@@ -418,16 +529,34 @@ scrollBtn.addEventListener("click", () => {
   scrollBtn.style.display = "none";
 });
 
+// ================= USERS =================
 function updateUserList() {
-  const userList = document.getElementById("userList"); userList.innerHTML = "";
+  const userList = document.getElementById("userList");
+  userList.innerHTML = "";
+
   const allUsers = [userId, ...Object.keys(connections)];
-  allUsers.forEach(id => { const div = document.createElement("div"); div.className = "user-item"; div.textContent = id; userList.appendChild(div); });
+
+  allUsers.forEach(id => {
+    const div = document.createElement("div");
+    div.className = "user-item";
+
+    const name = (id === userId)
+      ? username + " (You)"
+      : userNames[id] || id;
+
+    div.textContent = name;
+
+    userList.appendChild(div);
+  });
 }
-function generateRandomUserId(length=6) {
+
+// ================= UTIL =================
+function generateRandomUserId(length = 6) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let id='user_'; for (let i=0;i<length;i++) id+=chars.charAt(Math.floor(Math.random()*chars.length));
+  let id = 'user_';
+  for (let i = 0; i < length; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
   return id;
 }
 </script>
-</body>
-</html>
