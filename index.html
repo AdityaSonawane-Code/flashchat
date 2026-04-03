@@ -274,7 +274,7 @@
 let peer, connections = {}, connToHost = null;
 let isHost = false, userId = null, mode = 'group';
 let username = "Anonymous";
-let userNames = {}; // peerId -> username
+let userNames = {};
 let hostId = null;
 
 // ================= MODE =================
@@ -311,23 +311,18 @@ function checkHostExists(code, callback) {
 
     conn.on('open', () => {
       exists = true;
-
-      // mark as check connection
       conn.send({ type: "check" });
-
       conn.close();
       tempPeer.destroy();
       callback(true);
     });
-
-    conn.on('error', () => {});
 
     setTimeout(() => {
       if (!exists) {
         try { tempPeer.destroy(); } catch(e){}
         callback(false);
       }
-    }, 1800);
+    }, 1500);
   });
 }
 
@@ -349,10 +344,9 @@ function startHost() {
   username = document.getElementById('username').value.trim() || "Host";
   const code = document.getElementById('groupCode').value.trim();
 
-  if (!code) return alert("Enter or generate a code first.");
+  if (!code) return alert("Enter code first.");
 
   checkHostExists(code, (exists) => {
-
     if (exists) {
       alert("Chat already exists. You can only join.");
       return;
@@ -373,20 +367,28 @@ function startHost() {
     });
 
     peer.on('connection', conn => {
-      connections[conn.peer] = conn;
 
       conn.on('data', data => {
 
-        // ✅ ignore temp check connection
         if (data.type === "check") return;
 
-        // ✅ user join
-        if (data.type === "intro") {
-          userNames[conn.peer] = data.name;
-          logSystem(`${data.name} joined`);
+        // 🔥 JOIN REQUEST (NEW)
+        if (data.type === "joinRequest") {
+          const allow = confirm(`${data.name} wants to join. Allow?`);
 
-          updateUserList();
-          broadcastUserList();
+          if (allow) {
+            connections[conn.peer] = conn;
+            userNames[conn.peer] = data.name;
+
+            conn.send({ type: "joinAccepted" });
+
+            logSystem(`${data.name} joined`);
+            updateUserList();
+            broadcastUserList();
+          } else {
+            conn.send({ type: "joinRejected" });
+            conn.close();
+          }
           return;
         }
 
@@ -394,7 +396,6 @@ function startHost() {
       });
 
       conn.on('close', () => {
-        // ✅ prevent undefined left
         if (userNames[conn.peer]) {
           logSystem(`${userNames[conn.peer]} left`);
         }
@@ -414,10 +415,8 @@ function joinGroup() {
   username = document.getElementById('username').value.trim() || "User";
   const code = document.getElementById('groupCode').value.trim();
 
-  if (!code) return alert("Enter a code to join.");
-  if (isHost) return alert("You are already host.");
-
-  logSystem("Checking room...");
+  if (!code) return alert("Enter code.");
+  if (isHost) return alert("You are host.");
 
   checkHostExists(code, (exists) => {
 
@@ -428,21 +427,35 @@ function joinGroup() {
 
     userId = generateRandomUserId();
     peer = new Peer(userId);
-    userNames[userId] = username;
 
     peer.on('open', () => {
       connToHost = peer.connect(code);
 
       connToHost.on('open', () => {
-        logSystem("Connected to host");
 
+        // 🔥 SEND JOIN REQUEST
         connToHost.send({
-          type: "intro",
+          type: "joinRequest",
           name: username
         });
+
+        logSystem("Waiting for host approval...");
       });
 
-      connToHost.on('data', data => handleIncomingData("Host", data));
+      connToHost.on('data', data => {
+
+        if (data.type === "joinAccepted") {
+          logSystem("Joined successfully!");
+          userNames[userId] = username;
+        }
+
+        if (data.type === "joinRejected") {
+          alert("Host rejected your request.");
+          connToHost.close();
+        }
+
+        handleIncomingData("Host", data);
+      });
     });
   });
 }
@@ -512,7 +525,6 @@ function handleIncomingData(sender, data) {
 function displayData(sender, data) {
   if (!data) return;
 
-  // ✅ sync user list
   if (data.type === "userList") {
     userNames = data.users;
     hostId = data.hostId;
@@ -571,13 +583,6 @@ function logSystem(text) {
   autoScroll();
 }
 
-// ================= SCROLL =================
-const logDiv = document.getElementById("log");
-
-function autoScroll() {
-  logDiv.scrollTop = logDiv.scrollHeight;
-}
-
 // ================= USERS =================
 function updateUserList() {
   const userList = document.getElementById("userList");
@@ -591,8 +596,26 @@ function updateUserList() {
     if (id === userId) name += " (You)";
     if (id === hostId) name += " 👑";
 
+    // 🔥 HOST CAN KICK USERS
+    if (isHost && id !== hostId) {
+      div.style.cursor = "pointer";
+      div.onclick = () => kickUser(id);
+    }
+
     div.textContent = name;
     userList.appendChild(div);
+  }
+}
+
+// ================= KICK USER =================
+function kickUser(id) {
+  if (!isHost) return;
+
+  if (confirm("Remove this user?")) {
+    if (connections[id]) {
+      connections[id].send({ type: "system", text: "You were removed by host." });
+      connections[id].close();
+    }
   }
 }
 
