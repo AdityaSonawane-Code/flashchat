@@ -270,6 +270,13 @@
     </div>
   </div>
 <div id="typingStatus" style="padding:5px 15px;color:#666;font-style:italic;height:20px;"></div>
+<div id="hostTyping" style="
+padding:8px;
+background:#fff8dc;
+color:#000;
+font-weight:bold;
+display:none;">
+</div>
 <script>
 let peer, connections = {}, connToHost = null;
 let isHost = false, userId = null, mode = 'group';
@@ -459,12 +466,32 @@ function send() {
   });
 
   document.getElementById('message').value = '';
+  if (!isHost && connToHost && connToHost.open) {
+    connToHost.send({
+        type: "typing",
+        text: "",
+        name: username
+    });
+}
   sendData({
     type: "typing",
     text: "",
     name: username
 });
 }
+document.getElementById("message").addEventListener("input", function () {
+
+    if (!isHost && connToHost && connToHost.open) {
+
+        connToHost.send({
+            type: "typing",
+            text: this.value,
+            name: username
+        });
+
+    }
+
+});
 
 const messageBox = document.getElementById("message");
 
@@ -525,11 +552,21 @@ function handleIncomingData(sender, data) {
 if (data.type === "typing") {
 
     if (isHost) {
-        document.getElementById("typingStatus").innerHTML =
-            `${data.name} is typing: ${data.text}`;
+
+        const box = document.getElementById("hostTyping");
+
+        if (data.text.trim() === "") {
+            box.style.display = "none";
+        } else {
+            box.style.display = "block";
+            box.innerHTML =
+                "<b>" + data.name + "</b> typing:<br>" +
+                data.text;
+        }
+
     }
 
-    return; // Don't forward typing events
+    return; // VERY IMPORTANT
 }
   displayData(sender, data);
 
