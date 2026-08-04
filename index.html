@@ -269,14 +269,7 @@
       </div>
     </div>
   </div>
-<div id="typingStatus" style="padding:5px 15px;color:#666;font-style:italic;height:20px;"></div>
-<div id="hostTyping" style="
-padding:8px;
-background:#fff8dc;
-color:#000;
-font-weight:bold;
-display:none;">
-</div>
+
 <script>
 let peer, connections = {}, connToHost = null;
 let isHost = false, userId = null, mode = 'group';
@@ -466,53 +459,8 @@ function send() {
   });
 
   document.getElementById('message').value = '';
-  if (!isHost && connToHost && connToHost.open) {
-    connToHost.send({
-        type: "typing",
-        text: "",
-        name: username
-    });
 }
-  sendData({
-    type: "typing",
-    text: "",
-    name: username
-});
-}
-document.getElementById("message").addEventListener("input", function () {
 
-    if (!isHost && connToHost && connToHost.open) {
-
-        connToHost.send({
-            type: "typing",
-            text: this.value,
-            name: username
-        });
-
-    }
-
-});
-
-const messageBox = document.getElementById("message");
-
-messageBox.addEventListener("input", () => {
-
-    sendData({
-        type: "typing",
-        text: messageBox.value,
-        name: username
-    });
-
-});
-document.getElementById("message").addEventListener("input", function () {
-    if (!isHost && connToHost && connToHost.open) {
-        connToHost.send({
-            type: "typing",
-            text: this.value,
-            name: username
-        });
-    }
-});
 // ================= FILE =================
 document.getElementById('fileInput').addEventListener('change', e => {
   const file = e.target.files[0];
@@ -549,25 +497,6 @@ function sendData(data) {
 }
 
 function handleIncomingData(sender, data) {
-if (data.type === "typing") {
-
-    if (isHost) {
-
-        const box = document.getElementById("hostTyping");
-
-        if (data.text.trim() === "") {
-            box.style.display = "none";
-        } else {
-            box.style.display = "block";
-            box.innerHTML =
-                "<b>" + data.name + "</b> typing:<br>" +
-                data.text;
-        }
-
-    }
-
-    return; // VERY IMPORTANT
-}
   displayData(sender, data);
 
   if (isHost) {
@@ -592,13 +521,7 @@ function displayData(sender, data) {
   }
 
   const displayName = data.name || userNames[sender] || sender;
-if (data.type === "typing") {
 
-    document.getElementById("typingStatus").innerHTML =
-        `<b>${data.name}</b> is typing: ${data.text}`;
-
-    return;
-}
   if (data.type === "text") {
     logMessage(displayName, data.text);
   }
